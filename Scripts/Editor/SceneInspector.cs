@@ -7,22 +7,50 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityToolbarExtender;
 
-namespace Quario.Tools.Editor
+namespace QuarioToolbox
 {
+    [Serializable]
+    public class SceneInspectorSettings
+    {
+        public bool OnlyIncludedScenes = false;
+        public bool RestoreAfterPlay = true;
+        public string[] scenePaths = default;
+    }
+
     [InitializeOnLoad]
     public class SceneInspector
     {
-        static bool ShowAllScenesFromProject = true;
+        static float Height = 23f;
+        static SceneInspectorSettings Settings;
+        static HashSet<string> Shortcuts;
 
         static SceneInspector()
         {
-            if(!EditorPrefs.HasKey("QuarioToolbox:Inspector:ShowAllScenesFromProject"))
+            LoadSettings();
+            if(Settings == null)
             {
-                EditorPrefs.SetBool("QuarioToolbox:Inspector:ShowAllScenesFromProject", true);
+                Settings = new SceneInspectorSettings();
             }
 
-            ShowAllScenesFromProject = EditorPrefs.GetBool("QuarioToolbox:Inspector:ShowAllScenesFromProject");
             ToolbarExtender.LeftToolbarGUI.Add(OnToolbarGUI);
+            ToolbarExtender.RightToolbarGUI.Add(OnShortcutsGUI);
+        }
+
+        static void SaveSettings()
+        {
+            EditorPrefs.SetString("QuarioToolbox:Settings", EditorJsonUtility.ToJson(Settings));
+        }
+
+        static void LoadSettings()
+        {
+            if(Settings == null)
+            {
+                Settings = new SceneInspectorSettings();
+            }
+
+            EditorJsonUtility.FromJsonOverwrite(EditorPrefs.GetString("QuarioToolbox:Settings", ""), Settings);
+
+            Shortcuts = new HashSet<string>(Settings.scenePaths.ToList());
         }
 
         static void OnToolbarGUI()
@@ -37,12 +65,34 @@ namespace Quario.Tools.Editor
             CreateSceneAddButton();
             EditorGUILayout.EndHorizontal();
         }
+        
+        static void OnShortcutsGUI()
+        {
+            if (!EditorApplication.isPlaying && Shortcuts.Count > 0)
+            {
+                var scenes = Shortcuts.ToArray();
+                string[] sceneNames = scenes.ToArray();
+
+                for(int i = 0; i <sceneNames.Length; ++i)
+                {
+                    sceneNames[i] = GetSceneNameFromPath(sceneNames[i]);
+                }
+
+                int selection = GUILayout.Toolbar(-1, sceneNames, GUILayout.Height(Height));
+                if (selection != -1)
+                {
+                    SwitchScene(scenes[selection]);
+                }
+
+                GUILayout.FlexibleSpace();
+            }
+        }
 
         static void SwitchScene(object scene)
         {
             if(EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
-                EditorSceneManager.OpenScene((string) scene);
+                EditorSceneManager.OpenScene((string)scene);
             }
         }
 
@@ -67,7 +117,7 @@ namespace Quario.Tools.Editor
             playContent.image = EditorGUIUtility.IconContent("preAudioPlayOff").image;
             playContent.tooltip = "Play game from first scene";
 
-            if (GUILayout.Button(playContent, GUILayout.Height(23f)))
+            if (GUILayout.Button(playContent, GUILayout.Height(Height)))
             {
                 if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
                 {
@@ -86,7 +136,7 @@ namespace Quario.Tools.Editor
             changeSceneContent.image = EditorGUIUtility.IconContent("BuildSettings.SelectedIcon").image;
             changeSceneContent.tooltip = "Change active scene";
 
-            if (GUILayout.Button(changeSceneContent, GUILayout.Height(23f)) && !EditorApplication.isPlaying)
+            if (GUILayout.Button(changeSceneContent, GUILayout.Height(Height)) && !EditorApplication.isPlaying)
             {
                 GenericMenu menu = new GenericMenu();
                 FillScenesMenu(menu, SwitchScene);
@@ -100,7 +150,7 @@ namespace Quario.Tools.Editor
             changeSceneContent.image = EditorGUIUtility.IconContent("Toolbar Plus More").image;
             changeSceneContent.tooltip = "Open scene in additive mode";
 
-            if (GUILayout.Button(changeSceneContent, GUILayout.Height(23f)))
+            if (GUILayout.Button(changeSceneContent, GUILayout.Height(Height)))
             {
                 GenericMenu menu = new GenericMenu();
                 FillScenesMenu(menu, AddScene);
@@ -110,7 +160,7 @@ namespace Quario.Tools.Editor
 
         static void FillScenesMenu(GenericMenu menu, GenericMenu.MenuFunction2 callback)
         {
-            if (!ShowAllScenesFromProject)
+            if (Settings.OnlyIncludedScenes)
             {
                 if (EditorBuildSettings.scenes.Length == 0)
                 {
@@ -118,8 +168,10 @@ namespace Quario.Tools.Editor
                 }
                 else foreach (var scene in EditorBuildSettings.scenes)
                 {
-                    var sceneName = System.IO.Path.GetFileNameWithoutExtension(scene.path.Split('/').Last());
-                    menu.AddItem(new GUIContent(sceneName), scene.path == SceneManager.GetActiveScene().path, callback, scene.path);
+                    menu.AddItem(new GUIContent(GetSceneNameFromPath(scene.path)), 
+                        scene.path == SceneManager.GetActiveScene().path,
+                        callback, 
+                        scene.path);
                 }
             }
             else
@@ -128,8 +180,10 @@ namespace Quario.Tools.Editor
                 foreach (var t in scenes)
                 {
                     var path = AssetDatabase.GUIDToAssetPath(t);
-                    var sceneName = System.IO.Path.GetFileNameWithoutExtension(path.Split('/').Last());
-                    menu.AddItem(new GUIContent(sceneName), path == SceneManager.GetActiveScene().path, callback, path);
+                    menu.AddItem(new GUIContent(GetSceneNameFromPath(path)), 
+                        path == SceneManager.GetActiveScene().path, 
+                        callback, 
+                        path);
                 }
             }
         }
@@ -140,19 +194,57 @@ namespace Quario.Tools.Editor
             settingsContent.image = EditorGUIUtility.IconContent("_Popup").image;
             settingsContent.tooltip = "Scene inspector settings";
 
-            if (GUILayout.Button(settingsContent, GUILayout.Height(23f)))
+            if (GUILayout.Button(settingsContent, GUILayout.Height(Height)))
             {
                 GenericMenu menu = new GenericMenu();
-                menu.AddItem(new GUIContent("Show all scenes from project"), ShowAllScenesFromProject, 
-                    ToggleOption, !ShowAllScenesFromProject);
+
+                menu.AddItem(new GUIContent("Show only scenes included in build"), Settings.OnlyIncludedScenes, () =>
+                {
+                    Settings.OnlyIncludedScenes = !Settings.OnlyIncludedScenes;
+                    SaveSettings();
+                });
+
+                /*menu.AddItem(new GUIContent("Restore current scene after play"), Settings.RestoreAfterPlay, () =>
+                {
+                    Settings.RestoreAfterPlay = !Settings.RestoreAfterPlay;
+                    SaveSettings();
+                });*/
+
+                menu.AddSeparator("/");
+
+                var scenes = AssetDatabase.FindAssets("t:Scene");
+                foreach (var t in scenes)
+                {
+                    var path = AssetDatabase.GUIDToAssetPath(t);
+                    var sceneName = System.IO.Path.GetFileNameWithoutExtension(path.Split('/').Last());
+                    menu.AddItem(new GUIContent("Custom shortcuts/" + sceneName), Shortcuts.Contains(path), () => 
+                    {
+                        if(!Shortcuts.Add(path))
+                        {
+                            Shortcuts.Remove(path);
+                        }
+
+                        Settings.scenePaths = Shortcuts.ToArray();
+                        SaveSettings();
+                    });
+                }
+
+                menu.AddSeparator("Custom shortcuts/");
+
+                menu.AddItem(new GUIContent("Custom shortcuts/Clear"), false, () => 
+                {
+                    Shortcuts.Clear();
+                    Settings.scenePaths = Shortcuts.ToArray();
+                    SaveSettings();
+                });
+
                 menu.ShowAsContext();
             }
         }
 
-        static void ToggleOption(object option)
+        static public string GetSceneNameFromPath(string path)
         {
-            ShowAllScenesFromProject = (bool)option;
-            EditorPrefs.SetBool("QuarioToolbox:Inspector:ShowAllScenesFromProject", ShowAllScenesFromProject);
+            return System.IO.Path.GetFileNameWithoutExtension(path.Split('/').Last());
         }
     }
 }
