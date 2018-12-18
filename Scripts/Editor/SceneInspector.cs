@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -14,7 +16,7 @@ namespace QuarioToolbox
     {
         public bool OnlyIncludedScenes = false;
         public bool RestoreAfterPlay = true;
-        public string[] scenePaths = default;
+        public string[] scenePaths;
     }
 
     [InitializeOnLoad]
@@ -38,18 +40,23 @@ namespace QuarioToolbox
 
         static void SaveSettings()
         {
-            EditorPrefs.SetString("QuarioToolbox:Settings", EditorJsonUtility.ToJson(Settings));
+            EditorPrefs.SetString(GetEditorSettingsKey(), EditorJsonUtility.ToJson(Settings));
         }
 
         static void LoadSettings()
         {
-            if(Settings == null)
+            if (Settings == null)
             {
                 Settings = new SceneInspectorSettings();
             }
 
-            EditorJsonUtility.FromJsonOverwrite(EditorPrefs.GetString("QuarioToolbox:Settings", ""), Settings);
+            var settingsKeyData = EditorPrefs.GetString(GetEditorSettingsKey());
+            if(settingsKeyData == "")
+            {
+                SaveSettings();
+            }
 
+            EditorJsonUtility.FromJsonOverwrite(EditorPrefs.GetString(GetEditorSettingsKey()), Settings);
             Shortcuts = new HashSet<string>(Settings.scenePaths.ToList());
         }
 
@@ -245,6 +252,11 @@ namespace QuarioToolbox
         static public string GetSceneNameFromPath(string path)
         {
             return System.IO.Path.GetFileNameWithoutExtension(path.Split('/').Last());
+        }
+
+        public static string GetEditorSettingsKey()
+        {
+            return "QuarioToolbox:" + Application.productName + ":Settings";
         }
     }
 }
