@@ -40,7 +40,7 @@ namespace QuarioToolbox
 
         static void SaveSettings()
         {
-            EditorPrefs.SetString(GetEditorSettingsKey(), EditorJsonUtility.ToJson(Settings));
+            EditorPrefs.SetString(GetEditorSettingsKey(), JsonUtility.ToJson(Settings));
         }
 
         static void LoadSettings()
@@ -56,7 +56,7 @@ namespace QuarioToolbox
                 SaveSettings();
             }
 
-            EditorJsonUtility.FromJsonOverwrite(EditorPrefs.GetString(GetEditorSettingsKey()), Settings);
+            JsonUtility.FromJsonOverwrite(EditorPrefs.GetString(GetEditorSettingsKey()), Settings);
             Shortcuts = new HashSet<string>(Settings.scenePaths.ToList());
         }
 
