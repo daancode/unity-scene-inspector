@@ -22,7 +22,7 @@ namespace QuarioToolbox
     [InitializeOnLoad]
     public class SceneInspector
     {
-        static float Height = 23f;
+        static float Height = 21f;
         static SceneInspectorSettings Settings;
         static HashSet<string> Shortcuts;
 
@@ -63,13 +63,20 @@ namespace QuarioToolbox
         static void OnToolbarGUI()
         {
             GUILayout.FlexibleSpace();
-            EditorGUI.BeginDisabledGroup(EditorApplication.isPlaying);
+            
             EditorGUILayout.BeginHorizontal();
-            CreateSettingsButton();
+            
+            EditorGUI.BeginDisabledGroup(EditorApplication.isPlaying);
             CreatePlayButton();
             CreateSceneChangeButton();
             EditorGUI.EndDisabledGroup();
+            
             CreateSceneAddButton();
+            
+            EditorGUI.BeginDisabledGroup(EditorApplication.isPlaying);
+            CreateSettingsButton();
+            EditorGUI.EndDisabledGroup();
+            
             EditorGUILayout.EndHorizontal();
         }
         
@@ -118,18 +125,31 @@ namespace QuarioToolbox
         static void CreatePlayButton()
         {
             var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = Color.green;
+            GUI.backgroundColor =  EditorApplication.isPlaying ? Color.red : Color.green;
 
             GUIContent playContent = new GUIContent();
-            playContent.image = EditorGUIUtility.IconContent("preAudioPlayOff").image;
+            
+            if (EditorApplication.isPlaying)
+            {
+                //playContent.image = EditorGUIUtility.IconContent("d_LookDevClose").image;
+                playContent.text = "Play Mode";
+            }
+            else
+            {
+                playContent.image = EditorGUIUtility.IconContent("Animation.Play").image;
+            }
+            
             playContent.tooltip = "Play game from first scene";
 
             if (GUILayout.Button(playContent, GUILayout.Height(Height)))
             {
-                if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                if (!EditorApplication.isPlaying)
                 {
-                    EditorSceneManager.OpenScene(EditorBuildSettings.scenes[0].path);
-                    EditorApplication.isPlaying = true;
+                    if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                    {
+                        EditorSceneManager.OpenScene(EditorBuildSettings.scenes[0].path);
+                        EditorApplication.isPlaying = true;
+                    }
                 }
             }
 
@@ -140,7 +160,7 @@ namespace QuarioToolbox
         {
             GUIContent changeSceneContent = new GUIContent();
             changeSceneContent.text = " " + SceneManager.GetActiveScene().name;
-            changeSceneContent.image = EditorGUIUtility.IconContent("BuildSettings.SelectedIcon").image;
+            changeSceneContent.image = EditorGUIUtility.IconContent("BuildSettings.Editor.Small").image; // BuildSettings.SelectedIcon
             changeSceneContent.tooltip = "Change active scene";
 
             if (GUILayout.Button(changeSceneContent, GUILayout.Height(Height)) && !EditorApplication.isPlaying)
