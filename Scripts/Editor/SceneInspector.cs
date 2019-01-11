@@ -1,10 +1,35 @@
-﻿using System;
+//  MIT License
+
+//  Copyright(c) 2018 Damian Barczynski
+
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
+
+// https://github.com/daancode/unity-scene-inspector
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityToolbarExtender;
@@ -22,7 +47,7 @@ namespace QuarioToolbox
     [InitializeOnLoad]
     public class SceneInspector
     {
-        static float Height = 23f;
+        static float Height = 21f;
         static SceneInspectorSettings Settings;
         static HashSet<string> Shortcuts;
 
@@ -63,13 +88,20 @@ namespace QuarioToolbox
         static void OnToolbarGUI()
         {
             GUILayout.FlexibleSpace();
-            EditorGUI.BeginDisabledGroup(EditorApplication.isPlaying);
+            
             EditorGUILayout.BeginHorizontal();
-            CreateSettingsButton();
+            
+            EditorGUI.BeginDisabledGroup(EditorApplication.isPlaying);
             CreatePlayButton();
             CreateSceneChangeButton();
             EditorGUI.EndDisabledGroup();
+            
             CreateSceneAddButton();
+            
+            EditorGUI.BeginDisabledGroup(EditorApplication.isPlaying);
+            CreateSettingsButton();
+            EditorGUI.EndDisabledGroup();
+            
             EditorGUILayout.EndHorizontal();
         }
         
@@ -118,18 +150,31 @@ namespace QuarioToolbox
         static void CreatePlayButton()
         {
             var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = Color.green;
+            GUI.backgroundColor =  EditorApplication.isPlaying ? Color.red : Color.green;
 
             GUIContent playContent = new GUIContent();
-            playContent.image = EditorGUIUtility.IconContent("preAudioPlayOff").image;
+            
+            if (EditorApplication.isPlaying)
+            {
+                //playContent.image = EditorGUIUtility.IconContent("d_LookDevClose").image;
+                playContent.text = "Play Mode";
+            }
+            else
+            {
+                playContent.image = EditorGUIUtility.IconContent("Animation.Play").image;
+            }
+            
             playContent.tooltip = "Play game from first scene";
 
             if (GUILayout.Button(playContent, GUILayout.Height(Height)))
             {
-                if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                if (!EditorApplication.isPlaying)
                 {
-                    EditorSceneManager.OpenScene(EditorBuildSettings.scenes[0].path);
-                    EditorApplication.isPlaying = true;
+                    if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                    {
+                        EditorSceneManager.OpenScene(EditorBuildSettings.scenes[0].path);
+                        EditorApplication.isPlaying = true;
+                    }
                 }
             }
 
@@ -140,7 +185,7 @@ namespace QuarioToolbox
         {
             GUIContent changeSceneContent = new GUIContent();
             changeSceneContent.text = " " + SceneManager.GetActiveScene().name;
-            changeSceneContent.image = EditorGUIUtility.IconContent("BuildSettings.SelectedIcon").image;
+            changeSceneContent.image = EditorGUIUtility.IconContent("BuildSettings.Editor.Small").image; // BuildSettings.SelectedIcon
             changeSceneContent.tooltip = "Change active scene";
 
             if (GUILayout.Button(changeSceneContent, GUILayout.Height(Height)) && !EditorApplication.isPlaying)
@@ -160,12 +205,12 @@ namespace QuarioToolbox
             if (GUILayout.Button(changeSceneContent, GUILayout.Height(Height)))
             {
                 GenericMenu menu = new GenericMenu();
-                FillScenesMenu(menu, AddScene);
+                FillScenesMenu(menu, AddScene, false);
                 menu.ShowAsContext();
             }
         }
 
-        static void FillScenesMenu(GenericMenu menu, GenericMenu.MenuFunction2 callback)
+        static void FillScenesMenu(GenericMenu menu, GenericMenu.MenuFunction2 callback, bool showActiveScene = true)
         {
             if (Settings.OnlyIncludedScenes)
             {
@@ -175,9 +220,9 @@ namespace QuarioToolbox
                 }
                 else foreach (var scene in EditorBuildSettings.scenes)
                 {
-                    menu.AddItem(new GUIContent(GetSceneNameFromPath(scene.path)), 
-                        scene.path == SceneManager.GetActiveScene().path,
-                        callback, 
+                    menu.AddItem(new GUIContent(GetSceneNameFromPath(scene.path)),
+                        scene.path == SceneManager.GetActiveScene().path && showActiveScene,
+                        callback,
                         scene.path);
                 }
             }
@@ -187,9 +232,9 @@ namespace QuarioToolbox
                 foreach (var t in scenes)
                 {
                     var path = AssetDatabase.GUIDToAssetPath(t);
-                    menu.AddItem(new GUIContent(GetSceneNameFromPath(path)), 
-                        path == SceneManager.GetActiveScene().path, 
-                        callback, 
+                    menu.AddItem(new GUIContent(GetSceneNameFromPath(path)),
+                        path == SceneManager.GetActiveScene().path && showActiveScene,
+                        callback,
                         path);
                 }
             }
@@ -210,7 +255,7 @@ namespace QuarioToolbox
                     Settings.OnlyIncludedScenes = !Settings.OnlyIncludedScenes;
                     SaveSettings();
                 });
-
+                
                 /*menu.AddItem(new GUIContent("Restore current scene after play"), Settings.RestoreAfterPlay, () =>
                 {
                     Settings.RestoreAfterPlay = !Settings.RestoreAfterPlay;
