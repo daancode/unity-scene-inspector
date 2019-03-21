@@ -263,7 +263,42 @@ namespace QuarioToolbox
                 });*/
 
                 menu.AddSeparator("/");
+                FetchShortcutScenes( menu );
+                menu.AddSeparator("Custom shortcuts/");
 
+                menu.AddItem(new GUIContent("Custom shortcuts/Clear"), false, () => 
+                {
+                    Shortcuts.Clear();
+                    Settings.scenePaths = Shortcuts.ToArray();
+                    SaveSettings();
+                });
+
+                menu.ShowAsContext();
+            }
+        }
+
+        static public void FetchShortcutScenes(GenericMenu menu)
+        {
+            if( Settings.OnlyIncludedScenes )
+            {
+                foreach (var scene in EditorBuildSettings.scenes)
+                {
+                    var path = scene.path;
+                    var sceneName = System.IO.Path.GetFileNameWithoutExtension(path.Split('/').Last());
+                    menu.AddItem(new GUIContent("Custom shortcuts/" + sceneName), Shortcuts.Contains(path), () => 
+                    {
+                        if(!Shortcuts.Add(path))
+                        {
+                            Shortcuts.Remove(path);
+                        }
+
+                        Settings.scenePaths = Shortcuts.ToArray();
+                        SaveSettings();
+                    });
+                }
+            }
+            else
+            {
                 var scenes = AssetDatabase.FindAssets("t:Scene");
                 foreach (var t in scenes)
                 {
@@ -280,20 +315,9 @@ namespace QuarioToolbox
                         SaveSettings();
                     });
                 }
-
-                menu.AddSeparator("Custom shortcuts/");
-
-                menu.AddItem(new GUIContent("Custom shortcuts/Clear"), false, () => 
-                {
-                    Shortcuts.Clear();
-                    Settings.scenePaths = Shortcuts.ToArray();
-                    SaveSettings();
-                });
-
-                menu.ShowAsContext();
             }
         }
-
+        
         static public string GetSceneNameFromPath(string path)
         {
             return System.IO.Path.GetFileNameWithoutExtension(path.Split('/').Last());
