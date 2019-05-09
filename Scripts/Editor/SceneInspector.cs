@@ -25,11 +25,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
-using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityToolbarExtender;
@@ -47,7 +44,7 @@ namespace QuarioToolbox
     [InitializeOnLoad]
     public class SceneInspector
     {
-        static float Height = 21f;
+        static float Height = 22f;
         static SceneInspectorSettings Settings;
         static HashSet<string> Shortcuts;
 
@@ -156,7 +153,6 @@ namespace QuarioToolbox
             
             if (EditorApplication.isPlaying)
             {
-                //playContent.image = EditorGUIUtility.IconContent("d_LookDevClose").image;
                 playContent.text = "Play Mode";
             }
             else
@@ -185,7 +181,7 @@ namespace QuarioToolbox
         {
             GUIContent changeSceneContent = new GUIContent();
             changeSceneContent.text = " " + SceneManager.GetActiveScene().name;
-            changeSceneContent.image = EditorGUIUtility.IconContent("BuildSettings.Editor.Small").image; // BuildSettings.SelectedIcon
+            changeSceneContent.image = EditorGUIUtility.IconContent("BuildSettings.Editor.Small").image;
             changeSceneContent.tooltip = "Change active scene";
 
             if (GUILayout.Button(changeSceneContent, GUILayout.Height(Height)) && !EditorApplication.isPlaying)
@@ -255,12 +251,6 @@ namespace QuarioToolbox
                     Settings.OnlyIncludedScenes = !Settings.OnlyIncludedScenes;
                     SaveSettings();
                 });
-                
-                /*menu.AddItem(new GUIContent("Restore current scene after play"), Settings.RestoreAfterPlay, () =>
-                {
-                    Settings.RestoreAfterPlay = !Settings.RestoreAfterPlay;
-                    SaveSettings();
-                });*/
 
                 menu.AddSeparator("/");
                 FetchShortcutScenes( menu );
