@@ -1,11 +1,7 @@
 # Unity Scene Inspector
-Scene inspector for Unity, simple but extremely useful.
+Helper package which extends default toolbar with scene utilities.
 
-![unity-scene-inspector](https://i.imgur.com/eGxu4jy.png)
+This tool allows you to switch fast between scenes in your project, play first scene even if isn't active and pin selected scenes to toolbar.
 
-## Key features
-* Play your first scene without necessity to manual switch to them
-* Change active scene without searching it in your assets
-  * You can search all scenes defined in project or only these which are defined in build settings
-* Add other scenes to active one (Additive mode)
-* Define your own custom scene shortcuts (You can have different configs for each project)
+
+![unity-scene-inspector](https://i.imgur.com/xUwEvZr.png)
