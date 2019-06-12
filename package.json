@@ -1,0 +1,19 @@
+{
+  "name": "com.daancode.scene-inspector",
+  "version": "1.0.1",
+  "displayName": "Scene Inspector",
+  "description": "Helper package which extends default toolbar with scene utilities.\n\nThis tool allows you to switch fast between scenes in your project, play first scene even if isn't active and pin selected scenes to toolbar.",
+  "unity": "2018.1",
+  "keywords": [
+    "scene",
+    "inspector",
+    "DCTools",
+    "daancode",
+    "scene-inspector"
+  ],
+  "author": {
+    "name": "Damian Barczy\u0144ski",
+    "email": "kontakt.daan@gmail.com",
+    "url": "https://github.com/daancode"
+  }
+}
