@@ -1,6 +1,6 @@
 //  MIT License
 
-//  Copyright(c) 2018 Damian Barczynski
+//  Copyright(c) 2020 Damian Barczynski
 
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +39,7 @@ using UnityEngine.SceneManagement;
 
 namespace Daancode.Utils
 {
+    // https://github.com/marijnz/unity-toolbar-extender.
     [InitializeOnLoad]
     public static class ToolbarExtender
     {
@@ -46,10 +47,20 @@ namespace Daancode.Utils
 
         private static readonly Assembly m_assembly = typeof( Editor ).Assembly;
         private static readonly Type m_toolbarType = m_assembly.GetType( "UnityEditor.Toolbar" );
-        private static readonly PropertyInfo m_viewVisualTree = m_assembly.GetType( "UnityEditor.GUIView" ).GetProperty( "visualTree", FLAGS );
         private static readonly FieldInfo m_imguiContainerOnGui = typeof( IMGUIContainer ).GetField( "m_OnGUIHandler", FLAGS );
         private static ScriptableObject m_currentToolbar;
 
+#if UNITY_2020_1_OR_NEWER
+		static Type m_iWindowBackendType = typeof(Editor).Assembly.GetType("UnityEditor.IWindowBackend");
+		static PropertyInfo m_windowBackend = m_assembly.GetType( "UnityEditor.GUIView" )
+                                                        .GetProperty("windowBackend", FLAGS);
+		static PropertyInfo m_viewVisualTree = m_iWindowBackendType.GetProperty("visualTree", FLAGS);
+#else
+        private static readonly PropertyInfo m_viewVisualTree = m_assembly
+                                                                .GetType( "UnityEditor.GUIView" )
+                                                                .GetProperty( "visualTree", FLAGS );
+#endif
+        
         private static readonly int m_toolCount = GetToolsCount();
         private static GUIStyle m_commandStyle = null;
 
@@ -70,12 +81,14 @@ namespace Daancode.Utils
                 m_currentToolbar = toolbars.Length > 0 ? (ScriptableObject) toolbars[0] : null;
             }
 
-            if (m_currentToolbar == null || !(m_viewVisualTree.GetValue( m_currentToolbar, null ) is VisualElement element))
-            {
-                return;
-            }
-                    
-            var container = element[0] as IMGUIContainer;
+#if UNITY_2020_1_OR_NEWER
+            var windowBackend = m_windowBackend.GetValue(m_currentToolbar);
+            var visualTree = (VisualElement) m_viewVisualTree.GetValue(windowBackend, null);
+#else
+            var visualTree = (VisualElement) m_viewVisualTree.GetValue(m_currentToolbar, null);
+#endif
+            
+            var container = visualTree[0] as IMGUIContainer;
             var handler = m_imguiContainerOnGui.GetValue( container ) as Action;
             handler -= OnGUI;
             handler += OnGUI;
@@ -86,7 +99,7 @@ namespace Daancode.Utils
         {
             if (m_commandStyle == null)
             {
-                m_commandStyle = new GUIStyle( "CommandLeft" );
+                m_commandStyle = new GUIStyle( "Command" );
             }
 
             var screenWidth = EditorGUIUtility.currentViewWidth;
@@ -141,7 +154,9 @@ namespace Daancode.Utils
             var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
             var toolIcons = m_toolbarType.GetField( fieldName, flags );
 
-#if UNITY_2019_1_OR_NEWER
+#if UNITY_2019_3_OR_NEWER
+            return toolIcons != null ? ( (int) toolIcons.GetValue( null ) ) : 8;
+#elif UNITY_2019_1_OR_NEWER
             return toolIcons != null ? ( (int) toolIcons.GetValue( null ) ) : 7;
 #elif UNITY_2018_1_OR_NEWER
 			return toolIcons != null ? ( (Array) toolIcons.GetValue( null ) ).Length : 6;
@@ -460,6 +475,12 @@ namespace Daancode.Utils
 
         private static void FetchShortcutScenes( GenericMenu menu )
         {
+            if (CurrentSettings.Shortcuts == null)
+            {
+                CurrentSettings.Shortcuts = new List<string>();
+                CurrentSettings.Save();
+            }
+            
             var scenes = GetScenes();
             foreach (var path in scenes)
             {
