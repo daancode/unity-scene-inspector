@@ -1,5 +1,5 @@
 {
-    "name": "Unity.DCSceneInspector.Editor",
+    "name": "Unity.Daancode.SceneInspector.Editor",
     "references": [],
     "optionalUnityReferences": [],
     "includePlatforms": [
@@ -10,6 +10,5 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
-    "versionDefines": []
+    "defineConstraints": []
 }
