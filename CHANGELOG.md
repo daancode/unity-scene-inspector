@@ -3,6 +3,10 @@ All notable changes to this package will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 
+## [1.1.1] - 2021-03-16
+## Fixed
+- Clean scene name after restore.
+
 ## [1.1.0] - 2020-08-29
 ## Added
 - Restore scene after exit play mode.
