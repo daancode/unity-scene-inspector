@@ -1,6 +1,6 @@
 //  MIT License
 
-//  Copyright(c) 2021 Damian Barczynski
+//  Copyright(c) 2022 Damian Barczynski
 
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -25,147 +25,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-#if UNITY_2019_1_OR_NEWER
-    using UnityEngine.UIElements;
-#else
+#if !UNITY_2019_1_OR_NEWER
 using UnityEngine.Experimental.UIElements;
 #endif
 
-namespace Daancode.Utils
+// ReSharper disable once CheckNamespace
+namespace Daancode.Editor
 {
-    // ToolbarExtender based on: https://github.com/marijnz/unity-toolbar-extender.
-    [InitializeOnLoad]
-    public static class ToolbarExtender
-    {
-        private const BindingFlags FLAGS = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-
-        private static readonly Assembly m_assembly = typeof( Editor ).Assembly;
-        private static readonly Type m_toolbarType = m_assembly.GetType( "UnityEditor.Toolbar" );
-        private static readonly FieldInfo m_imguiContainerOnGui = typeof( IMGUIContainer ).GetField( "m_OnGUIHandler", FLAGS );
-        private static ScriptableObject m_currentToolbar;
-
-#if UNITY_2020_1_OR_NEWER
-		static Type m_iWindowBackendType = typeof(Editor).Assembly.GetType("UnityEditor.IWindowBackend");
-		static PropertyInfo m_windowBackend = m_assembly.GetType( "UnityEditor.GUIView" )
-                                                        .GetProperty("windowBackend", FLAGS);
-		static PropertyInfo m_viewVisualTree = m_iWindowBackendType.GetProperty("visualTree", FLAGS);
-#else
-        private static readonly PropertyInfo m_viewVisualTree = m_assembly
-                                                                .GetType( "UnityEditor.GUIView" )
-                                                                .GetProperty( "visualTree", FLAGS );
-#endif
-
-        private static readonly int m_toolCount = GetToolsCount();
-        private static GUIStyle m_commandStyle = null;
-
-        public static readonly List<Action> LeftToolbarGUI = new List<Action>();
-        public static readonly List<Action> RightToolbarGUI = new List<Action>();
-
-        static ToolbarExtender()
-        {
-            EditorApplication.update -= OnUpdate;
-            EditorApplication.update += OnUpdate;
-        }
-
-        private static void OnUpdate()
-        {
-            if (m_currentToolbar == null)
-            {
-                var toolbars = Resources.FindObjectsOfTypeAll( m_toolbarType );
-                m_currentToolbar = toolbars.Length > 0 ? (ScriptableObject) toolbars[0] : null;
-            }
-
-#if UNITY_2020_1_OR_NEWER
-            var windowBackend = m_windowBackend.GetValue(m_currentToolbar);
-            var visualTree = (VisualElement) m_viewVisualTree.GetValue(windowBackend, null);
-#else
-            var visualTree = (VisualElement) m_viewVisualTree.GetValue( m_currentToolbar, null );
-#endif
-
-            var container = visualTree[0] as IMGUIContainer;
-            var handler = m_imguiContainerOnGui.GetValue( container ) as Action;
-            handler -= OnGUI;
-            handler += OnGUI;
-            m_imguiContainerOnGui.SetValue( container, handler );
-        }
-
-        private static void OnGUI()
-        {
-            if (m_commandStyle == null)
-            {
-                m_commandStyle = new GUIStyle( "Command" );
-            }
-
-            var screenWidth = EditorGUIUtility.currentViewWidth;
-
-#if UNITY_2019_1_OR_NEWER
-            var playButtonsPosition = ( screenWidth - 140 ) / 2;
-#else
-            var playButtonsPosition = ( screenWidth - 100 ) / 2;
-#endif
-
-            var leftToolbarRect = new Rect( 0, 4, screenWidth, 24 );
-            leftToolbarRect.xMin += 170 + 32 * m_toolCount;
-            leftToolbarRect.xMax = playButtonsPosition - 10;
-
-            var rightToolbarRect = new Rect( 0, 4, screenWidth, 24 )
-            {
-                xMin = playButtonsPosition + 10 + m_commandStyle.fixedWidth * 3,
-                xMax = screenWidth - 420
-            };
-
-            HandleCustomToolbar( LeftToolbarGUI, leftToolbarRect );
-            HandleCustomToolbar( RightToolbarGUI, rightToolbarRect );
-        }
-
-        private static void HandleCustomToolbar( IEnumerable<Action> toolbar, Rect rect )
-        {
-            if (!( rect.width > 0 ))
-            {
-                return;
-            }
-
-            using (new GUILayout.AreaScope( rect ))
-            {
-                using (new GUILayout.HorizontalScope())
-                {
-                    foreach (var handler in toolbar)
-                    {
-                        handler();
-                    }
-                }
-            }
-        }
-
-        private static int GetToolsCount()
-        {
-#if UNITY_2019_1_OR_NEWER
-            const string fieldName = "k_ToolCount";
-#else
-            const string fieldName = "s_ShownToolIcons";
-#endif
-
-            var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
-            var toolIcons = m_toolbarType.GetField( fieldName, flags );
-
-#if UNITY_2019_3_OR_NEWER
-            return toolIcons != null ? ( (int) toolIcons.GetValue( null ) ) : 8;
-#elif UNITY_2019_1_OR_NEWER
-            return toolIcons != null ? ( (int) toolIcons.GetValue( null ) ) : 7;
-#elif UNITY_2018_1_OR_NEWER
-            return toolIcons != null ? ( (Array) toolIcons.GetValue( null ) ).Length : 6;
-#else
-			return toolIcons != null ? ( (Array) toolIcons.GetValue( null ) ).Length : 5;
-#endif
-        }
-    }
-
     [InitializeOnLoad]
     public class SceneInspector
     {
@@ -173,14 +44,13 @@ namespace Daancode.Utils
         public class Settings
         {
             public bool OnlyIncludedScenes = false;
-            public bool EnableShortcuts = false;
             public bool ShowShortcutNames = false;
             public bool RestoreAfterPlay = true;
             public List<string> Shortcuts;
             public string LastOpenedScene;
 
             public static string Key => $"daancode:{Application.productName}:settings";
-            public bool ShortcutsValid => EnableShortcuts && Shortcuts != null && Shortcuts.Count > 0;
+            public bool ShortcutsValid => Shortcuts != null && Shortcuts.Count > 0;
 
             public void Save()
             {
@@ -245,8 +115,8 @@ namespace Daancode.Utils
         static SceneInspector()
         {
             CurrentSettings.Load();
-            ToolbarExtender.LeftToolbarGUI.Add( OnToolbarGUI );
-            ToolbarExtender.RightToolbarGUI.Add( OnShortcutsGUI );
+            ToolbarHook.OnLeftToolbarGUI += OnToolbarGUI;
+            ToolbarHook.OnRightToolbarGUI += OnShortcutsGUI;
             EditorApplication.playModeStateChanged += OnModeChanged;
         }
 
@@ -267,9 +137,10 @@ namespace Daancode.Utils
             }
         }
 
-        private static void OnToolbarGUI()
+        private static void OnToolbarGUI(Rect rect)
         {
             GUILayout.FlexibleSpace();
+            
             using (new EditorGUILayout.HorizontalScope())
             {
                 using (new EditorGUI.DisabledScope( EditorApplication.isPlaying ))
@@ -287,7 +158,7 @@ namespace Daancode.Utils
             }
         }
 
-        private static void OnShortcutsGUI()
+        private static void OnShortcutsGUI(Rect rect)
         {
             if (EditorApplication.isPlaying || !CurrentSettings.ShortcutsValid)
             {
@@ -438,22 +309,19 @@ namespace Daancode.Utils
                 AddNewScene( menu, "Default", NewSceneSetup.DefaultGameObjects, NewSceneMode.Single );
                 AddNewScene( menu, "Default (Additive)", NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive );
 
-                if (CurrentSettings.EnableShortcuts)
+                FetchShortcutScenes( menu );
+                menu.AddSeparator( "Shortcuts/" );
+                menu.AddItem( new GUIContent( "Shortcuts/Show Names" ), CurrentSettings.ShowShortcutNames, () =>
                 {
-                    FetchShortcutScenes( menu );
-                    menu.AddSeparator( "Shortcuts/" );
-                    menu.AddItem( new GUIContent( "Shortcuts/Show Names" ), CurrentSettings.ShowShortcutNames, () =>
-                    {
-                        CurrentSettings.ShowShortcutNames = !CurrentSettings.ShowShortcutNames;
-                        CurrentSettings.Save();
-                    } );
+                    CurrentSettings.ShowShortcutNames = !CurrentSettings.ShowShortcutNames;
+                    CurrentSettings.Save();
+                } );
 
-                    menu.AddItem( new GUIContent( "Shortcuts/Clear" ), false, () =>
-                    {
-                        CurrentSettings.Shortcuts.Clear();
-                        CurrentSettings.Save();
-                    } );
-                }
+                menu.AddItem( new GUIContent( "Shortcuts/Clear" ), false, () =>
+                {
+                    CurrentSettings.Shortcuts.Clear();
+                    CurrentSettings.Save();
+                } );
 
                 menu.AddSeparator( "" );
                 menu.AddDisabledItem( new GUIContent( "Settings" ) );
@@ -463,14 +331,7 @@ namespace Daancode.Utils
                     CurrentSettings.OnlyIncludedScenes = !CurrentSettings.OnlyIncludedScenes;
                     CurrentSettings.Save();
                 } );
-
-                menu.AddItem( new GUIContent( "Shortcuts enabled" ), CurrentSettings.EnableShortcuts,
-                () =>
-                {
-                    CurrentSettings.EnableShortcuts = !CurrentSettings.EnableShortcuts;
-                    CurrentSettings.Save();
-                } );
-
+                
                 menu.AddItem( new GUIContent( "Restore scene on play mode exit" ), CurrentSettings.RestoreAfterPlay,
                 () =>
                 {
