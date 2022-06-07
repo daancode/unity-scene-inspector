@@ -5,6 +5,12 @@ This tool allows you to switch fast between scenes in your project, play first s
 
 ![unity-scene-inspector](https://i.imgur.com/xUwEvZr.png)
 
+#### Tested on:
+- Unity 2018.4 LTS
+- Unity 2019.4 LTS
+- Unity 2020.3 LTS
+- Unity 2021.3 LTS
+
 ## How to use
 
 ### Unity 2018.1 or higher
@@ -16,3 +22,11 @@ This tool allows you to switch fast between scenes in your project, play first s
 ### Older Unity version
 1. Download repository
 1. Extract files to any directory in your unity project, eg. `Assets/3rdParty/SceneInspector`
+
+## Adding custom hooks
+
+You can add custom GUI callbacks:
+```c#
+ToolbarHook.Register(() => { EditorGUILayout.LabelField("Test") }, 0, ToolbarHook.Alignment.Left);
+```
+> By default scene inspector callbacks are set to 3 position.

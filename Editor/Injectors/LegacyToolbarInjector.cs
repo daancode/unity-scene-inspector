@@ -1,37 +1,43 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+
+#if !UNITY_2019_1_OR_NEWER
+using UnityEngine.Experimental.UIElements;
+#else
 using UnityEngine.UIElements;
+#endif
 
 // ReSharper disable once CheckNamespace
 namespace Daancode.Editor.Injectors
 {
     public class LegacyToolbarInjector  : IToolbarInjector
     {
-        private readonly FieldInfo _imguiHandlerFieldInfo = typeof(IMGUIContainer).GetField("m_OnGUIHandler", ToolbarHook.Flags);
+        private readonly FieldInfo _imguiHandlerFieldInfo = typeof(IMGUIContainer).GetField("m_OnGUIHandler", ToolbarHook.FLAGS);
 
         private GUIStyle _commandStyle;
-        private Action<Rect> _leftGUI;
-        private Action<Rect> _rightGUI;
+        private List<ToolbarHook.HookData> _hooks = new List<ToolbarHook.HookData>();
         
-        public void InjectGUI(VisualElement root, Action<Rect> onLeftGUI, Action<Rect> onRightGUI)
+        public void InjectGUI(VisualElement root, List<ToolbarHook.HookData> hooks)
         {
+            _hooks.Clear();
+            _hooks.AddRange(hooks);
+            
             var container = root[0] as IMGUIContainer;
             var handler = _imguiHandlerFieldInfo.GetValue(container) as Action;
             handler -= OnGUI;
             handler += OnGUI;
             _imguiHandlerFieldInfo.SetValue(container, handler);
-
-            _leftGUI = onLeftGUI;
-            _rightGUI = onRightGUI;
         }
 
         private void OnGUI()
         {
             if (_commandStyle == null)
             {
-                _commandStyle = new GUIStyle( "Command" );
+                _commandStyle = new GUIStyle("Command");
             }
             
             var screenWidth = EditorGUIUtility.currentViewWidth;
@@ -52,8 +58,22 @@ namespace Daancode.Editor.Injectors
                 xMax = screenWidth - 420
             };
             
-            _leftGUI?.Invoke(leftToolbarRect);
-            _rightGUI?.Invoke(rightToolbarRect);
+            HandleToolbar(leftToolbarRect, _hooks.Where(h => h.Align == ToolbarHook.Alignment.Left));
+            HandleToolbar(rightToolbarRect, _hooks.Where(h => h.Align == ToolbarHook.Alignment.Right));
+        }
+
+        private static void HandleToolbar(Rect rect, IEnumerable<ToolbarHook.HookData> hooks)
+        {
+            using (new GUILayout.AreaScope(rect))
+            {
+                using (new GUILayout.HorizontalScope())
+                {
+                    foreach (var hook in hooks)
+                    {
+                        hook.Callback?.Invoke();
+                    }
+                }
+            }
         }
         
         private static int GetToolsCount()

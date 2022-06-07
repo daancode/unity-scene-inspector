@@ -24,15 +24,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-
-#if !UNITY_2019_1_OR_NEWER
-using UnityEngine.Experimental.UIElements;
-#endif
 
 // ReSharper disable once CheckNamespace
 namespace Daancode.Editor
@@ -41,353 +38,358 @@ namespace Daancode.Editor
     public class SceneInspector
     {
         [Serializable]
-        public class Settings
+        public class SettingsData
         {
-            public bool OnlyIncludedScenes = false;
-            public bool ShowShortcutNames = false;
+            public bool OnlyIncludedScenes;
+            public bool ShowShortcutNames;
             public bool RestoreAfterPlay = true;
-            public List<string> Shortcuts;
-            public string LastOpenedScene;
+            public List<string> Shortcuts = new List<string>();
+            public List<string> LastOpenedScenes = new List<string>();
 
             public static string Key => $"daancode:{Application.productName}:settings";
             public bool ShortcutsValid => Shortcuts != null && Shortcuts.Count > 0;
 
             public void Save()
             {
-                EditorPrefs.SetString( Key, EditorJsonUtility.ToJson( this ) );
+                EditorPrefs.SetString(Key, EditorJsonUtility.ToJson(this));
             }
 
             public void Load()
             {
-                if (!EditorPrefs.HasKey( Key ))
-                {
-                    return;
-                }
+                if (!EditorPrefs.HasKey(Key)) return;
 
-                JsonUtility.FromJsonOverwrite( EditorPrefs.GetString( Key ), this );
+                JsonUtility.FromJsonOverwrite(EditorPrefs.GetString(Key), this);
+            }
+
+            public void ToggleOnlyBuildOption()
+            {
+                OnlyIncludedScenes = !OnlyIncludedScenes;
+                Settings.Save();
+            }
+
+            public void ToggleRestoreScenes()
+            {
+                Settings.RestoreAfterPlay = !Settings.RestoreAfterPlay;
+                Settings.Save();
+            }
+
+            public void ToggleShortcutNames()
+            {
+                Settings.ShowShortcutNames = !Settings.ShowShortcutNames;
+                Settings.Save();
+            }
+
+            public void ResetShortcuts()
+            {
+                Shortcuts.Clear();
+                Save();
             }
         }
 
-        private static class Styles
+        private static class Layout
         {
-            private static GUIContent _playButtonContent;
-            private static GUIContent _addSceneContent;
-            private static GUIContent _settingsContent;
+            private static GUIContent _currentSceneContent;
 
-            public static GUILayoutOption ShortWidth => GUILayout.Width( 25f );
-            public static GUILayoutOption Height => GUILayout.Height( 22f );
-
-#if UNITY_2019_3_OR_NEWER
-            public static Color ButtonColor = new Color( 1.0f, 1.0f, 1.0f, .5f );
+            public static GUILayoutOption ShortWidth => GUILayout.Width(25f);
+            
+#if UNITY_2021_3_OR_NEWER
+            public static GUILayoutOption Height => GUILayout.Height(20f);
 #else
-            public static Color ButtonColor = Color.white;
+            public static GUILayoutOption Height => GUILayout.Height(22f);
 #endif
 
-            public static GUIContent PlaySceneContent => _playButtonContent ?? ( _playButtonContent = new GUIContent
-            {
-                image = EditorGUIUtility.IconContent( "Animation.Play" ).image,
-                tooltip = "Enter play mode from first scene defined in build settings."
-            } );
+            public static readonly Color ButtonColor = new Color(0.76f, 0.76f, 0.76f);
 
-            public static GUIContent ChangeSceneContent => new GUIContent
+            public static GUIContent PlaySceneContent { get; } = new GUIContent()
             {
-                text = " " + SceneManager.GetActiveScene().name,
-                image = EditorGUIUtility.IconContent( "BuildSettings.Editor.Small" ).image,
-                tooltip = "Change active scene"
+                image = EditorGUIUtility.IconContent("Animation.Play").image,
+                tooltip = "Enter play mode from first scene defined in build settings."
             };
 
-            public static GUIContent AddSceneContent => _addSceneContent ?? ( _addSceneContent = new GUIContent
-            {
-                image = EditorGUIUtility.IconContent( "Toolbar Plus More" ).image,
-                tooltip = "Open scene in additive mode"
-            } );
+            public static GUIContent ChangeSceneContent => GetButtonForCurrentScene();
 
-            public static GUIContent SettingsContent => _settingsContent ?? ( _settingsContent = new GUIContent
+            public static GUIContent AddSceneContent { get; } = new GUIContent()
             {
-                image = EditorGUIUtility.IconContent( "_Popup" ).image,
-                tooltip = "Scene inspector settings"
-            } );
+                image = EditorGUIUtility.IconContent("Toolbar Plus More").image,
+                tooltip = "Additional scene options..."
+            };
+
+            public static GUIContent ShortcutsShowNames { get; } = new GUIContent("Manage Shortcuts/Show Names");
+            public static GUIContent ShortcutsClear { get; } = new GUIContent("Manage Shortcuts/Clear");
+            public static GUIContent SettingsOnlyBuild { get; } = new GUIContent("Settings/Show only build scenes");
+            public static GUIContent SettingsRestore { get; } = new GUIContent("Settings/Restore scene on play mode exit");
+            
+            public static GUIContent[] ToolbarContent => new[]
+            {
+                PlaySceneContent,
+                ChangeSceneContent,
+                AddSceneContent
+            };
+
+            public static GUIContent GetShortcutContent(string sceneName) => new GUIContent("Manage Shortcuts/" + sceneName);
+
+            private static GUIContent GetButtonForCurrentScene()
+            {
+                if (_currentSceneContent == null)
+                {
+                    _currentSceneContent = new GUIContent
+                    {
+                        text = "...",
+                        image = EditorGUIUtility.IconContent("BuildSettings.Editor.Small").image,
+                        tooltip = "Change active scene"
+                    };
+                }
+                
+                var currentScene = SceneManager.GetActiveScene().name;
+                if (string.IsNullOrEmpty(currentScene))
+                {
+                    currentScene = "Untitled";
+                }
+                _currentSceneContent.text = $" {currentScene}";
+                return _currentSceneContent;
+            }
         }
-
-        private static Settings s_settings;
-        private static Settings CurrentSettings => s_settings ?? ( s_settings = new Settings() );
+        
+        private static SettingsData Settings { get; } = new SettingsData();
 
         static SceneInspector()
         {
-            CurrentSettings.Load();
-            ToolbarHook.OnLeftToolbarGUI += OnToolbarGUI;
-            ToolbarHook.OnRightToolbarGUI += OnShortcutsGUI;
+            Settings.Load();
+            ToolbarHook.Register(OnToolbarGUI, 3, ToolbarHook.Alignment.Left);
+            ToolbarHook.Register(OnShortcutsGUI, 3, ToolbarHook.Alignment.Right);
             EditorApplication.playModeStateChanged += OnModeChanged;
         }
-
-        private static void OnModeChanged( PlayModeStateChange playModeState )
+        
+        private static void OnModeChanged(PlayModeStateChange playModeState)
         {
-            CurrentSettings.Load();
+            Settings.Load();
 
-            if(!CurrentSettings.RestoreAfterPlay || CurrentSettings.LastOpenedScene == string.Empty)
+            if (!Settings.RestoreAfterPlay || Settings.LastOpenedScenes.Count == 0)
             {
                 return;
             }
 
-            if ( playModeState == PlayModeStateChange.EnteredEditMode)
+            if (playModeState != PlayModeStateChange.EnteredEditMode)
             {
-                EditorSceneManager.OpenScene( CurrentSettings.LastOpenedScene );
-                CurrentSettings.LastOpenedScene = string.Empty;
-                CurrentSettings.Save();
+                return;
             }
+
+            var anyOpened = false;
+            foreach (var scenePath in Settings.LastOpenedScenes.Where(path => !string.IsNullOrEmpty(path)))
+            {
+                EditorSceneManager.OpenScene(scenePath, anyOpened ? OpenSceneMode.Additive : OpenSceneMode.Single);
+                anyOpened = true;
+            }
+
+            Settings.LastOpenedScenes.Clear();
+            Settings.Save();
         }
 
-        private static void OnToolbarGUI(Rect rect)
+        private static void OnToolbarGUI()
         {
-            GUILayout.FlexibleSpace();
-            
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope( EditorApplication.isPlaying ))
-                {
-                    CreatePlayButton();
-                    CreateSceneChangeButton();
-                }
+                GUILayout.FlexibleSpace();
 
-                CreateSceneAddButton();
-
-                using (new EditorGUI.DisabledScope( EditorApplication.isPlaying ))
+                var currentColor = GUI.backgroundColor;
+                GUI.backgroundColor = Layout.ButtonColor;
+                EditorGUI.BeginChangeCheck();
+                var selection = GUILayout.Toolbar(-1, Layout.ToolbarContent, GUI.skin.button, GUI.ToolbarButtonSize.FitToContents, Layout.Height);
+                if (EditorGUI.EndChangeCheck())
                 {
-                    CreateSettingsButton();
+                    switch (selection)
+                    {
+                        case 0: OnPlayButtonClicked(); break;
+                        case 1: OnSceneChangeRequested(); break;
+                        case 2: OnSettingsButtonClicked(); break;
+                    }
                 }
+                GUI.backgroundColor = currentColor;
             }
         }
 
-        private static void OnShortcutsGUI(Rect rect)
+        private static void OnShortcutsGUI()
         {
-            if (EditorApplication.isPlaying || !CurrentSettings.ShortcutsValid)
+            if (!Settings.ShortcutsValid)
             {
                 return;
             }
 
-            for (var i = 0; i < CurrentSettings.Shortcuts.Count; ++i)
+            EditorGUILayout.BeginHorizontal();
+            for (var i = 0; i < Settings.Shortcuts.Count; ++i)
             {
-                var isActiveScene = IsActiveScene( CurrentSettings.Shortcuts[i] );
-                var sceneName = GetSceneNameFromPath( CurrentSettings.Shortcuts[i] );
+                var isActiveScene = IsActiveScene(Settings.Shortcuts[i]);
+                var sceneName = GetSceneNameFromPath(Settings.Shortcuts[i]);
 
                 var oldColor = GUI.backgroundColor;
-                GUI.backgroundColor = isActiveScene ? Color.cyan : Styles.ButtonColor;
+                GUI.backgroundColor = isActiveScene ? Color.cyan : Layout.ButtonColor;
 
-                using (new EditorGUI.DisabledScope( isActiveScene ))
+                using (new EditorGUI.DisabledScope(isActiveScene))
                 {
-                    if (CurrentSettings.ShowShortcutNames)
+                    if (Settings.ShowShortcutNames)
                     {
-                        if (GUILayout.Button( SceneButtonContent( i, sceneName ), Styles.Height ))
-                        {
-                            SwitchScene( CurrentSettings.Shortcuts[i] );
-                        }
+                        if (GUILayout.Button(SceneButtonContent(i, sceneName), Layout.Height))
+                            SwitchScene(Settings.Shortcuts[i]);
                     }
                     else
                     {
-                        if (GUILayout.Button( SceneButtonContent( i, sceneName ), Styles.ShortWidth, Styles.Height ))
-                        {
-                            SwitchScene( CurrentSettings.Shortcuts[i] );
-                        }
+                        if (GUILayout.Button(SceneButtonContent(i, sceneName), Layout.ShortWidth, Layout.Height))
+                            SwitchScene(Settings.Shortcuts[i]);
                     }
                 }
 
                 GUI.backgroundColor = oldColor;
             }
 
-            GUIContent SceneButtonContent( int index, string sceneName )
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            GUIContent SceneButtonContent(int index, string sceneName)
             {
                 return new GUIContent
                 {
-                    text = CurrentSettings.ShowShortcutNames ? sceneName : $"{index + 1}",
-                    tooltip = GetSceneNameFromPath( CurrentSettings.Shortcuts[index] )
+                    text = Settings.ShowShortcutNames ? sceneName : $"{index + 1}",
+                    tooltip = GetSceneNameFromPath(Settings.Shortcuts[index])
                 };
             }
-
-            GUILayout.FlexibleSpace();
         }
-
-        private static void SwitchScene( object scene )
+        
+        private static void OnPlayButtonClicked()
         {
-            if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+            if (EditorBuildSettings.scenes.Length == 0)
             {
-                EditorSceneManager.OpenScene( scene as string );
+                Debug.LogError("Unable to play scene, there is no scenes defined in build settings.");
+                return;
             }
+
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+            {
+                return;
+            }
+
+            var countLoaded = SceneManager.sceneCount;
+            for (var i = 0; i < countLoaded; i++)
+            {
+                Settings.LastOpenedScenes.Add(SceneManager.GetSceneAt(i).path);
+            }
+
+            Settings.Save();
+            EditorSceneManager.OpenScene(EditorBuildSettings.scenes[0].path);
+            EditorApplication.isPlaying = true;
         }
 
-        private static void AddScene( object scene )
+        private static void OnSceneChangeRequested()
         {
             if (EditorApplication.isPlaying)
             {
-                SceneManager.LoadScene( scene as string, LoadSceneMode.Additive );
+                Debug.LogError("[SceneInspector] Unable to change scene during runtime.");
+                return;
+            }
+
+            var menu = new GenericMenu();
+            FillScenesMenu(menu, SwitchScene);
+            menu.ShowAsContext();
+        }
+
+        private static void OnSettingsButtonClicked()
+        {
+            var menu = new GenericMenu();
+            AddNewScene("Empty", NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            AddNewScene("Empty - Additive", NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+            AddNewScene("Default", NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+            AddNewScene("Default - Additive", NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive);
+            FetchShortcutScenes(menu);
+            menu.AddSeparator("Manage Shortcuts/");
+            menu.AddItem(Layout.ShortcutsShowNames, Settings.ShowShortcutNames, Settings.ToggleShortcutNames);
+            menu.AddItem(Layout.ShortcutsClear, false, Settings.ResetShortcuts);
+            menu.AddItem(Layout.SettingsOnlyBuild, Settings.OnlyIncludedScenes, Settings.ToggleOnlyBuildOption);
+            menu.AddItem(Layout.SettingsRestore, Settings.RestoreAfterPlay, Settings.ToggleRestoreScenes);
+            
+            menu.AddSeparator("");
+            menu.AddDisabledItem(new GUIContent("Open Additive"));
+            FillScenesMenu(menu, AddScene);
+            menu.ShowAsContext();
+
+            void AddNewScene(string label, NewSceneSetup setup, NewSceneMode mode)
+            {
+                menu.AddItem(new GUIContent($"Create Scene/{label}"), false, () => { EditorSceneManager.NewScene(setup, mode); });
+            }
+        }
+
+        private static void SwitchScene(object scene) => OpenSceneInternal(scene as string, 0);
+        private static void AddScene(object scene) => OpenSceneInternal(scene as string, 1);
+
+        private static void OpenSceneInternal(string scenePath, int mode)
+        {
+            if (string.IsNullOrEmpty(scenePath))
+            {
+                return;
+            }
+            
+            if (EditorApplication.isPlaying)
+            {
+                SceneManager.LoadScene(scenePath, (LoadSceneMode) mode);
             }
             else
             {
-                EditorSceneManager.OpenScene( scene as string, OpenSceneMode.Additive );
+                EditorSceneManager.OpenScene(scenePath, (OpenSceneMode) mode);
+            }
+        }
+        
+        private static void FillScenesMenu(GenericMenu menu, GenericMenu.MenuFunction2 callback)
+        {
+            foreach (var path in GetScenes().Where(path => !IsActiveScene(path)))
+            {
+                menu.AddItem(new GUIContent(GetSceneNameFromPath(path)), false, callback, path);
             }
         }
 
-        private static void CreatePlayButton()
+        private static IEnumerable<string> GetScenes()
         {
-            var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = EditorApplication.isPlaying ? Color.red : Color.green;
-
-            using (new EditorGUI.DisabledScope( EditorBuildSettings.scenes.Length == 0 ))
+            if (Settings.OnlyIncludedScenes && EditorBuildSettings.scenes.Length != 0)
             {
-                if (GUILayout.Button( Styles.PlaySceneContent, Styles.Height ) && EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
-                {
-                    CurrentSettings.LastOpenedScene = SceneManager.GetActiveScene().path;
-                    CurrentSettings.Save();
-                    EditorSceneManager.OpenScene( EditorBuildSettings.scenes[0].path );
-                    EditorApplication.isPlaying = true;
-                }
+                return EditorBuildSettings.scenes.Select(s => s.path).ToArray();
             }
 
-            GUI.backgroundColor = oldColor;
+            return AssetDatabase.FindAssets("t:Scene")?.Select(AssetDatabase.GUIDToAssetPath).ToArray();
         }
-
-        private static void CreateSceneChangeButton()
+        
+        private static void FetchShortcutScenes(GenericMenu menu)
         {
-            var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = Styles.ButtonColor;
-            if (GUILayout.Button( Styles.ChangeSceneContent, Styles.Height ) && !EditorApplication.isPlaying)
+            if (Settings.Shortcuts == null)
             {
-                var menu = new GenericMenu();
-                FillScenesMenu( menu, SwitchScene );
-                menu.ShowAsContext();
-            }
-            GUI.backgroundColor = oldColor;
-        }
-
-        private static void CreateSceneAddButton()
-        {
-            var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = Styles.ButtonColor;
-            if (GUILayout.Button( Styles.AddSceneContent, Styles.Height ))
-            {
-                var menu = new GenericMenu();
-                FillScenesMenu( menu, AddScene, false );
-                menu.ShowAsContext();
-            }
-            GUI.backgroundColor = oldColor;
-        }
-
-        private static void FillScenesMenu( GenericMenu menu, GenericMenu.MenuFunction2 callback, bool showActiveScene = true )
-        {
-            var scenePaths = GetScenes();
-
-            foreach (var path in scenePaths)
-            {
-                menu.AddItem( SceneNameContent( path ), IsActiveScene( path ) && showActiveScene, callback, path );
-            }
-
-            GUIContent SceneNameContent( string path )
-            {
-                return new GUIContent( GetSceneNameFromPath( path ) );
-            }
-        }
-
-        private static string[] GetScenes()
-        {
-            if (CurrentSettings.OnlyIncludedScenes && EditorBuildSettings.scenes.Length != 0)
-            {
-                return EditorBuildSettings.scenes.Select( s => s.path ).ToArray();
-            }
-
-            return AssetDatabase.FindAssets( "t:Scene" )?.Select( AssetDatabase.GUIDToAssetPath ).ToArray();
-        }
-
-        private static void CreateSettingsButton()
-        {
-            var oldColor = GUI.backgroundColor;
-            GUI.backgroundColor = Styles.ButtonColor;
-            if (GUILayout.Button( Styles.SettingsContent, Styles.Height ))
-            {
-                var menu = new GenericMenu();
-
-                AddNewScene( menu, "Empty", NewSceneSetup.EmptyScene, NewSceneMode.Single );
-                AddNewScene( menu, "Empty (Additive)", NewSceneSetup.EmptyScene, NewSceneMode.Additive );
-                AddNewScene( menu, "Default", NewSceneSetup.DefaultGameObjects, NewSceneMode.Single );
-                AddNewScene( menu, "Default (Additive)", NewSceneSetup.DefaultGameObjects, NewSceneMode.Additive );
-
-                FetchShortcutScenes( menu );
-                menu.AddSeparator( "Shortcuts/" );
-                menu.AddItem( new GUIContent( "Shortcuts/Show Names" ), CurrentSettings.ShowShortcutNames, () =>
-                {
-                    CurrentSettings.ShowShortcutNames = !CurrentSettings.ShowShortcutNames;
-                    CurrentSettings.Save();
-                } );
-
-                menu.AddItem( new GUIContent( "Shortcuts/Clear" ), false, () =>
-                {
-                    CurrentSettings.Shortcuts.Clear();
-                    CurrentSettings.Save();
-                } );
-
-                menu.AddSeparator( "" );
-                menu.AddDisabledItem( new GUIContent( "Settings" ) );
-                menu.AddItem( new GUIContent( "Only build scenes" ), CurrentSettings.OnlyIncludedScenes,
-                () =>
-                {
-                    CurrentSettings.OnlyIncludedScenes = !CurrentSettings.OnlyIncludedScenes;
-                    CurrentSettings.Save();
-                } );
-                
-                menu.AddItem( new GUIContent( "Restore scene on play mode exit" ), CurrentSettings.RestoreAfterPlay,
-                () =>
-                {
-                    CurrentSettings.RestoreAfterPlay = !CurrentSettings.RestoreAfterPlay;
-                    CurrentSettings.Save();
-                } );
-
-                menu.ShowAsContext();
-            }
-
-            void AddNewScene( GenericMenu menu, string label, NewSceneSetup setup, NewSceneMode mode )
-            {
-                menu.AddItem( new GUIContent( $"Create Scene/{label}" ), false, () =>
-                {
-                    EditorSceneManager.NewScene( setup, mode );
-                } );
-            }
-            GUI.backgroundColor = oldColor;
-        }
-
-        private static void FetchShortcutScenes( GenericMenu menu )
-        {
-            if (CurrentSettings.Shortcuts == null)
-            {
-                CurrentSettings.Shortcuts = new List<string>();
-                CurrentSettings.Save();
+                Settings.Shortcuts = new List<string>();
+                Settings.Save();
             }
 
             var scenes = GetScenes();
             foreach (var path in scenes)
             {
-                var sceneName = GetSceneNameFromPath( path );
-                var isShortcut = CurrentSettings.Shortcuts.Contains( path );
+                var sceneName = GetSceneNameFromPath(path);
+                var isShortcut = Settings.Shortcuts.Contains(path);
 
-                menu.AddItem( new GUIContent( "Shortcuts/" + sceneName ), isShortcut, () =>
+                menu.AddItem(Layout.GetShortcutContent(sceneName), isShortcut, () =>
                 {
                     if (isShortcut)
                     {
-                        CurrentSettings.Shortcuts.Remove( path );
+                        Settings.Shortcuts.Remove(path);
                     }
                     else
                     {
-                        CurrentSettings.Shortcuts.Add( path );
+                        Settings.Shortcuts.Add(path);
                     }
 
-                    CurrentSettings.Save();
-                } );
+                    Settings.Save();
+                });
             }
         }
 
-        private static string GetSceneNameFromPath( string path )
+        private static string GetSceneNameFromPath(string path)
         {
-            return System.IO.Path.GetFileNameWithoutExtension( path.Split( '/' ).Last() );
+            return Path.GetFileNameWithoutExtension(path.Split('/').Last());
         }
 
-        private static bool IsActiveScene( string scenePath )
+        private static bool IsActiveScene(string scenePath)
         {
             return scenePath == SceneManager.GetActiveScene().path;
         }
